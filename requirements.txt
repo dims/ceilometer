@@ -2,6 +2,21 @@
 # of appearance. Changing the order has an impact on the overall integration
 # process, which may cause wedges in the gate later.
 
+-e git+https://github.com/openstack/oslo.concurrency.git#egg=oslo.concurrency
+-e git+https://github.com/openstack/oslo.config.git#egg=oslo.config
+-e git+https://github.com/openstack/oslo.context.git#egg=oslo.context
+-e git+https://github.com/openstack/oslo.log.git#egg=oslo.log
+-e git+https://github.com/openstack/oslo.reports.git#egg=oslo.reports
+-e git+https://github.com/openstack/oslo.serialization.git#egg=oslo.serialization
+-e git+https://github.com/openstack/oslo.service.git#egg=oslo.service
+-e git+https://github.com/openstack/oslo.utils.git#egg=oslo.utils
+-e git+https://github.com/openstack/oslo.db.git#egg=oslo.db
+-e git+https://github.com/openstack/oslo.rootwrap.git#egg=oslo.rootwrap
+-e git+https://github.com/openstack/oslo.messaging.git#egg=oslo.messaging
+-e git+https://github.com/openstack/oslo.i18n.git#egg=oslo.i18n
+-e git+https://github.com/openstack/oslo.middleware.git#egg=oslo.middleware
+-e git+https://github.com/openstack/oslo.versionedobjects.git#egg=oslo.versionedobjects
+
 retrying!=1.3.0,>=1.2.3 # Apache-2.0
 croniter>=0.3.4 # MIT License
 eventlet>=0.17.4
@@ -11,23 +26,9 @@ kafka-python>=0.9.2 # Apache-2.0
 keystonemiddleware>=2.0.0
 lxml>=2.3
 msgpack-python>=0.4.0
-oslo.context>=0.2.0 # Apache-2.0
-oslo.db>=2.4.1 # Apache-2.0
-oslo.concurrency>=2.3.0 # Apache-2.0
-oslo.config>=2.3.0 # Apache-2.0
-oslo.i18n>=1.5.0 # Apache-2.0
-oslo.log>=1.8.0 # Apache-2.0
-oslo.policy>=0.5.0 # Apache-2.0
-oslo.reports>=0.1.0 # Apache-2.0
-oslo.rootwrap>=2.0.0 # Apache-2.0
-oslo.service>=0.9.0 # Apache-2.0
 PasteDeploy>=1.5.0
 pbr>=1.6
 pecan>=1.0.0
-oslo.messaging!=1.17.0,!=1.17.1,>=1.16.0 # Apache-2.0
-oslo.middleware>=2.8.0 # Apache-2.0
-oslo.serialization>=1.4.0 # Apache-2.0
-oslo.utils>=2.0.0 # Apache-2.0
 pysnmp<5.0.0,>=4.2.1
 python-ceilometerclient>=1.5.0
 python-glanceclient>=0.18.0
