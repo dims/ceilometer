@@ -2,7 +2,6 @@ language: python
 env:
   - TOXENV=py34
   - TOXENV=py27
-  - TOXENV=functional
 install:
   - travis_retry pip install tox
 script:
