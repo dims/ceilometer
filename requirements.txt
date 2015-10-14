@@ -11,6 +11,7 @@
 -e git+https://github.com/openstack/oslo.service.git#egg=oslo.service
 -e git+https://github.com/openstack/oslo.utils.git#egg=oslo.utils
 -e git+https://github.com/openstack/oslo.db.git#egg=oslo.db
+-e git+https://github.com/openstack/oslo.policy.git#egg=oslo.policy
 -e git+https://github.com/openstack/oslo.rootwrap.git#egg=oslo.rootwrap
 -e git+https://github.com/openstack/oslo.messaging.git#egg=oslo.messaging
 -e git+https://github.com/openstack/oslo.i18n.git#egg=oslo.i18n
