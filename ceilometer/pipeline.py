@@ -293,11 +293,7 @@ class EventSource(Source):
 
     def __init__(self, cfg):
         super(EventSource, self).__init__(cfg)
-        try:
-            self.events = cfg['events']
-        except KeyError as err:
-            raise PipelineException(
-                "Required field %s not specified" % err.args[0], cfg)
+        self.events = cfg.get('events')
         self.check_source_filtering(self.events, 'events')
 
     def support_event(self, event_name):
@@ -315,13 +311,8 @@ class SampleSource(Source):
 
     def __init__(self, cfg):
         super(SampleSource, self).__init__(cfg)
-        try:
-            # Support 'counters' for backward compatibility
-            self.meters = cfg.get('meters', cfg.get('counters'))
-        except KeyError as err:
-            raise PipelineException(
-                "Required field %s not specified" % err.args[0], cfg)
-
+        # Support 'counters' for backward compatibility
+        self.meters = cfg.get('meters', cfg.get('counters'))
         try:
             self.interval = int(cfg.get('interval', 600))
         except ValueError:
@@ -689,8 +680,7 @@ class PipelineManager(object):
         "meter_name" will be excluded; 'meter_name' means 'meter_name'
         will be included.
 
-        The 'meter_name" is Sample name field. For meter names with
-        variable like "instance:m1.tiny", it's "instance:*".
+        The 'meter_name" is Sample name field.
 
         Valid meters definition is all "included meter names", all
         "excluded meter names", wildcard and "excluded meter names", or
