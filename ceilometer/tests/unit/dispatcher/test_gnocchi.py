@@ -28,6 +28,7 @@ import six
 import six.moves.urllib.parse as urlparse
 import testscenarios
 
+from ceilometer import declarative
 from ceilometer.dispatcher import gnocchi
 from ceilometer import service as ceilometer_service
 from ceilometer.tests import base
@@ -133,7 +134,7 @@ class DispatcherTest(base.BaseTestCase):
             self.conf.config(filter_service_activity=False,
                              resources_definition_file=temp,
                              group='dispatcher_gnocchi')
-            self.assertRaises(gnocchi.ResourcesDefinitionException,
+            self.assertRaises(declarative.DefinitionException,
                               gnocchi.GnocchiDispatcher, self.conf.conf)
 
     @mock.patch('ceilometer.dispatcher.gnocchi.GnocchiDispatcher'
@@ -368,8 +369,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
             attributes = self.postable_attributes.copy()
             attributes.update(self.patchable_attributes)
             attributes['id'] = self.sample['resource_id']
-            attributes['metrics'] = dict((metric_name,
-                                          {'archive_policy_name': 'low'})
+            attributes['metrics'] = dict((metric_name, {})
                                          for metric_name in self.metric_names)
             expected_calls.append(mock.call.session().post(
                 "%(url)s/%(resource_type)s" % url_params,
@@ -383,8 +383,7 @@ class DispatcherWorkflowTest(base.BaseTestCase,
                 "%(url)s/%(resource_type)s/%(resource_id)s/metric"
                 % url_params,
                 headers=headers,
-                data=json_matcher({self.sample['counter_name']:
-                                   {'archive_policy_name': 'low'}})
+                data=json_matcher({self.sample['counter_name']: {}})
             ))
             post_responses.append(MockResponse(self.metric))
 

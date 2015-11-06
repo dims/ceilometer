@@ -13,18 +13,17 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import fnmatch
-import functools
 import itertools
 import operator
 import os
 import threading
 
-from jsonpath_rw_ext import parser
 from oslo_config import cfg
 from oslo_log import log
 import six
-import yaml
+from stevedore import extension
 
+from ceilometer import declarative
 from ceilometer import dispatcher
 from ceilometer.dispatcher import gnocchi_client
 from ceilometer.i18n import _, _LE
@@ -45,7 +44,7 @@ dispatcher_opts = [
                default="http://localhost:8041",
                help='URL to Gnocchi.'),
     cfg.StrOpt('archive_policy',
-               default="low",
+               default=None,
                help='The archive policy to use when the dispatcher '
                'create a new metric.'),
     cfg.StrOpt('resources_definition_file',
@@ -81,42 +80,23 @@ class ResourcesDefinition(object):
     MANDATORY_FIELDS = {'resource_type': six.string_types,
                         'metrics': list}
 
-    JSONPATH_RW_PARSER = parser.ExtentedJsonPathParser()
-
-    def __init__(self, definition_cfg, default_archive_policy):
+    def __init__(self, definition_cfg, default_archive_policy, plugin_manager):
         self._default_archive_policy = default_archive_policy
         self.cfg = definition_cfg
 
         for field, field_type in self.MANDATORY_FIELDS.items():
             if field not in self.cfg:
-                raise ResourcesDefinitionException(
+                raise declarative.DefinitionException(
                     _LE("Required field %s not specified") % field, self.cfg)
             if not isinstance(self.cfg[field], field_type):
-                raise ResourcesDefinitionException(
+                raise declarative.DefinitionException(
                     _LE("Required field %(field)s should be a %(type)s") %
                     {'field': field, 'type': field_type}, self.cfg)
 
-        self._field_getter = {}
-        for name, fval in self.cfg.get('attributes', {}).items():
-            if isinstance(fval, six.integer_types):
-                self._field_getter[name] = fval
-            else:
-                try:
-                    parts = self.JSONPATH_RW_PARSER.parse(fval)
-                except Exception as e:
-                    raise ResourcesDefinitionException(
-                        _LE("Parse error in JSONPath specification "
-                            "'%(jsonpath)s': %(err)s")
-                        % dict(jsonpath=fval, err=e), self.cfg)
-                self._field_getter[name] = functools.partial(
-                    self._parse_jsonpath_field, parts)
-
-    @staticmethod
-    def _parse_jsonpath_field(parts, sample):
-        values = [match.value for match in parts.find(sample)
-                  if match.value is not None]
-        if values:
-            return values[0]
+        self._attributes = {}
+        for name, attr_cfg in self.cfg.get('attributes', {}).items():
+            self._attributes[name] = declarative.Definition(name, attr_cfg,
+                                                            plugin_manager)
 
     def match(self, metric_name):
         for t in self.cfg['metrics']:
@@ -126,21 +106,21 @@ class ResourcesDefinition(object):
 
     def attributes(self, sample):
         attrs = {}
-        for attr, getter in self._field_getter.items():
-            if callable(getter):
-                value = getter(sample)
-            else:
-                value = getter
+        for name, definition in self._attributes.items():
+            value = definition.parse(sample)
             if value is not None:
-                attrs[attr] = value
+                attrs[name] = value
         return attrs
 
     def metrics(self):
         metrics = {}
         for t in self.cfg['metrics']:
-            archive_policy = self.cfg.get('archive_policy')
-            metrics[t] = dict(archive_policy_name=archive_policy or
-                              self._default_archive_policy)
+            archive_policy = self.cfg.get('archive_policy',
+                                          self._default_archive_policy)
+            if archive_policy is None:
+                metrics[t] = {}
+            else:
+                metrics[t] = dict(archive_policy_name=archive_policy)
         return metrics
 
 
@@ -169,17 +149,12 @@ class GnocchiDispatcher(dispatcher.Base):
 
     @classmethod
     def _load_resources_definitions(cls, conf):
-        res_def_file = cls._get_config_file(
-            conf, conf.dispatcher_gnocchi.resources_definition_file)
-        data = {}
-        if res_def_file is not None:
-            with open(res_def_file) as data_file:
-                try:
-                    data = yaml.safe_load(data_file)
-                except ValueError:
-                    data = {}
-
-        return [ResourcesDefinition(r, conf.dispatcher_gnocchi.archive_policy)
+        plugin_manager = extension.ExtensionManager(
+            namespace='ceilometer.event.trait_plugin')
+        data = declarative.load_definitions(
+            {}, conf.dispatcher_gnocchi.resources_definition_file)
+        return [ResourcesDefinition(r, conf.dispatcher_gnocchi.archive_policy,
+                                    plugin_manager)
                 for r in data.get('resources', [])]
 
     @property

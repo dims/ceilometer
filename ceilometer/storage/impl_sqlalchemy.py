@@ -431,9 +431,16 @@ class Connection(base.Connection):
 
         session = self._engine_facade.get_session()
         # get list of resource_ids
-        res_q = session.query(distinct(models.Resource.resource_id)).join(
-            models.Sample,
-            models.Sample.resource_id == models.Resource.internal_id)
+        has_timestamp = start_timestamp or end_timestamp
+        # NOTE: When sql_expire_samples_only is enabled, there will be some
+        #       resources without any sample, in such case we should use inner
+        #       join on sample table to avoid wrong result.
+        if cfg.CONF.sql_expire_samples_only or has_timestamp:
+            res_q = session.query(distinct(models.Resource.resource_id)).join(
+                models.Sample,
+                models.Sample.resource_id == models.Resource.internal_id)
+        else:
+            res_q = session.query(distinct(models.Resource.resource_id))
         res_q = make_query_from_filter(session, res_q, s_filter,
                                        require_meter=False)
         res_q = res_q.limit(limit) if limit else res_q
@@ -601,7 +608,22 @@ class Connection(base.Connection):
 
         session = self._engine_facade.get_session()
         engine = self._engine_facade.get_engine()
-        query = session.query(models.FullSample)
+        query = session.query(models.Sample.timestamp,
+                              models.Sample.recorded_at,
+                              models.Sample.message_id,
+                              models.Sample.message_signature,
+                              models.Sample.volume.label('counter_volume'),
+                              models.Meter.name.label('counter_name'),
+                              models.Meter.type.label('counter_type'),
+                              models.Meter.unit.label('counter_unit'),
+                              models.Resource.source_id,
+                              models.Resource.user_id,
+                              models.Resource.project_id,
+                              models.Resource.resource_metadata,
+                              models.Resource.resource_id).join(
+            models.Meter, models.Meter.id == models.Sample.meter_id).join(
+            models.Resource,
+            models.Resource.internal_id == models.Sample.resource_id)
         transformer = sql_utils.QueryTransformer(models.FullSample, query,
                                                  dialect=engine.dialect.name)
         if filter_expr is not None:
