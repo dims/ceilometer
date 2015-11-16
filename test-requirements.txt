@@ -17,6 +17,7 @@ mock>=1.2
 -e git+https://github.com/openstack/oslotest.git#egg=oslotest
 -e git+https://github.com/openstack/oslo.vmware.git#egg=oslo.vmware
 
+reno>=0.1.1  # Apache2
 PyMySQL>=0.6.2 # MIT License
 # Docs Requirements
 psycopg2>=2.5
