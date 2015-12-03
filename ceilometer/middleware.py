@@ -52,7 +52,7 @@ class HTTPRequest(plugin_base.NotificationBase,
         this plugin.
         """
         return [oslo_messaging.Target(topic=topic, exchange=exchange)
-                for topic in conf.notification_topics
+                for topic in plugin_base.get_notification_topics(conf)
                 for exchange in conf.http_control_exchanges]
 
     def process_notification(self, message):

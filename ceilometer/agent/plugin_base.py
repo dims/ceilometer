@@ -32,6 +32,12 @@ ExchangeTopics = collections.namedtuple('ExchangeTopics',
                                         ['exchange', 'topics'])
 
 
+def get_notification_topics(conf):
+    if 'notification_topics' in conf:
+        return conf.notification_topics
+    return conf.oslo_messaging_notifications.topics
+
+
 class PluginBase(object):
     """Base class for all plugins."""
 

@@ -84,7 +84,7 @@ class SensorNotification(plugin_base.NotificationBase):
         """oslo.messaging.TargetS for this plugin."""
         return [messaging.Target(topic=topic,
                                  exchange=conf.ironic_exchange)
-                for topic in conf.notification_topics]
+                for topic in plugin_base.get_notification_topics(conf)]
 
     def _get_sample(self, message):
         try:

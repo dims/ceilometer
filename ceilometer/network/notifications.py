@@ -68,7 +68,7 @@ class NetworkNotificationBase(plugin_base.NotificationBase):
         """
         return [oslo_messaging.Target(topic=topic,
                                       exchange=conf.neutron_control_exchange)
-                for topic in conf.notification_topics]
+                for topic in plugin_base.get_notification_topics(conf)]
 
     def process_notification(self, message):
         counter_name = getattr(self, 'counter_name', self.resource_name)

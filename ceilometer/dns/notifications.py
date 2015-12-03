@@ -43,7 +43,7 @@ class DnsMetricsNotificationBase(plugin_base.NotificationBase):
         """
         return [oslo_messaging.Target(topic=topic,
                                       exchange=conf.dns_control_exchange)
-                for topic in conf.notification_topics]
+                for topic in plugin_base.get_notification_topics(conf)]
 
 
 class DomainExists(DnsMetricsNotificationBase):

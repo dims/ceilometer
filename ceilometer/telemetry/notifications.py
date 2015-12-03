@@ -39,7 +39,7 @@ class TelemetryBase(plugin_base.NotificationBase):
         """
         return [oslo_messaging.Target(
                 topic=topic, exchange=conf.ceilometer_control_exchange)
-                for topic in conf.notification_topics]
+                for topic in plugin_base.get_notification_topics(conf)]
 
 
 class TelemetryIpc(TelemetryBase):
