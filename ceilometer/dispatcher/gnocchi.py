@@ -12,9 +12,10 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from collections import defaultdict
+from hashlib import md5
 import itertools
 import operator
-import os
 import threading
 import uuid
 
@@ -24,6 +25,7 @@ from keystoneauth1 import session as ka_session
 from oslo_config import cfg
 from oslo_log import log
 import requests
+import retrying
 import six
 from stevedore import extension
 
@@ -33,7 +35,8 @@ from ceilometer.i18n import _, _LE, _LW
 from ceilometer import keystone_client
 from ceilometer import utils
 
-CACHE_NAMESPACE = uuid.uuid4()
+NAME_ENCODED = __name__.encode('utf-8')
+CACHE_NAMESPACE = uuid.UUID(bytes=md5(NAME_ENCODED).digest())
 LOG = log.getLogger(__name__)
 
 dispatcher_opts = [
@@ -136,7 +139,7 @@ class ResourcesDefinition(object):
         return attrs
 
 
-def GnocchiClient(conf):
+def get_gnocchiclient(conf):
     requests_session = requests.session()
     for scheme in requests_session.adapters.keys():
         requests_session.mount(scheme, ka_session.TCPKeepAliveAdapter(
@@ -147,6 +150,26 @@ def GnocchiClient(conf):
                          interface=conf.service_credentials.interface,
                          region_name=conf.service_credentials.region_name,
                          endpoint_override=conf.dispatcher_gnocchi.url)
+
+
+class LockedDefaultDict(defaultdict):
+    """defaultdict with lock to handle threading
+
+    Dictionary only deletes if nothing is accessing dict and nothing is holding
+    lock to be deleted. If both cases are not true, it will skip delete.
+    """
+    def __init__(self, *args, **kwargs):
+        self.lock = threading.Lock()
+        super(LockedDefaultDict, self).__init__(*args, **kwargs)
+
+    def __getitem__(self, key):
+        with self.lock:
+            return super(LockedDefaultDict, self).__getitem__(key)
+
+    def __delitem__(self, key):
+        with self.lock:
+            with self.__getitem__(key)(blocking=False):
+                super(LockedDefaultDict, self).__delitem__(key)
 
 
 class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
@@ -194,15 +217,23 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
 
         self._gnocchi_project_id = None
         self._gnocchi_project_id_lock = threading.Lock()
-        self._gnocchi_resource_lock = threading.Lock()
+        self._gnocchi_resource_lock = LockedDefaultDict(threading.Lock)
 
-        self._gnocchi = GnocchiClient(conf)
+        self._gnocchi = get_gnocchiclient(conf)
+        # Convert retry_interval secs to msecs for retry decorator
+        retries = conf.storage.max_retries
 
-    @staticmethod
-    def _get_config_file(conf, config_file):
-        if not os.path.exists(config_file):
-            config_file = cfg.CONF.find_file(config_file)
-        return config_file
+        @retrying.retry(wait_fixed=conf.storage.retry_interval * 1000,
+                        stop_max_attempt_number=(retries if retries >= 0
+                                                 else None))
+        def _get_connection():
+            self._gnocchi.capabilities.list()
+
+        try:
+            _get_connection()
+        except Exception:
+            LOG.error(_LE('Failed to connect to Gnocchi.'))
+            raise
 
     @classmethod
     def _load_resources_definitions(cls, conf):
@@ -292,6 +323,7 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                 "id": resource_id,
                 "user_id": samples[0]['user_id'],
                 "project_id": samples[0]['project_id'],
+                "metrics": rd.metrics,
             }
             measures = []
 
@@ -308,7 +340,7 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
                                                   resource_id)
             except gnocchi_exc.ResourceNotFound:
                 self._if_not_cached("create", resource_type, resource,
-                                    self._create_resource, rd.metrics)
+                                    self._create_resource)
 
             except gnocchi_exc.MetricNotFound:
                 metric = {'resource_id': resource['id'],
@@ -332,9 +364,8 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
             self._if_not_cached("update", resource_type, resource,
                                 self._update_resource, resource_extra)
 
-    def _create_resource(self, resource_type, resource, metrics):
+    def _create_resource(self, resource_type, resource):
         try:
-            resource["metrics"] = metrics
             self._gnocchi.resource.create(resource_type, resource)
             LOG.debug('Resource %s created', resource["id"])
         except gnocchi_exc.ResourceAlreadyExists:
@@ -353,9 +384,19 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
             cache_key = resource['id']
             attribute_hash = self._check_resource_cache(cache_key, resource)
             if attribute_hash:
-                with self._gnocchi_resource_lock:
-                    method(resource_type, resource, *args, **kwargs)
-                    self.cache.set(cache_key, attribute_hash)
+                with self._gnocchi_resource_lock[cache_key]:
+                    # NOTE(luogangyi): there is a possibility that the
+                    # resource was already built in cache by another
+                    # ceilometer-collector when we get the lock here.
+                    attribute_hash = self._check_resource_cache(cache_key,
+                                                                resource)
+                    if attribute_hash:
+                        method(resource_type, resource, *args, **kwargs)
+                        self.cache.set(cache_key, attribute_hash)
+                    else:
+                        LOG.debug('resource cache recheck hit for '
+                                  '%s %s', operation, cache_key)
+                self._gnocchi_resource_lock.pop(cache_key, None)
             else:
                 LOG.debug('Resource cache hit for %s %s', operation, cache_key)
         else:
@@ -363,8 +404,9 @@ class GnocchiDispatcher(dispatcher.MeterDispatcherBase):
 
     def _check_resource_cache(self, key, resource_data):
         cached_hash = self.cache.get(key)
-        if cached_hash:
-            attribute_hash = hash(frozenset(resource_data.items()))
-            if cached_hash != attribute_hash:
-                return attribute_hash
-        return None
+        attribute_hash = hash(frozenset(filter(lambda x: x[0] != "metrics",
+                                               resource_data.items())))
+        if not cached_hash or cached_hash != attribute_hash:
+            return attribute_hash
+        else:
+            return None
