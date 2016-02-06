@@ -254,7 +254,7 @@ function _ceilometer_configure_storage_backend {
         # NOTE(gordc): set higher retry in case gnocchi is started after ceilometer on a slow machine
         iniset $CEILOMETER_CONF storage max_retries 20
         # NOTE(gordc): set batching to better handle recording on a slow machine
-        iniset $CEILOMETER_CONF collector batch_size 10
+        iniset $CEILOMETER_CONF collector batch_size 50
         iniset $CEILOMETER_CONF collector batch_timeout 5
         iniset $CEILOMETER_CONF dispatcher_gnocchi url $gnocchi_url
         iniset $CEILOMETER_CONF dispatcher_gnocchi archive_policy ${GNOCCHI_ARCHIVE_POLICY}
@@ -316,11 +316,14 @@ function configure_ceilometer {
 
     # The compute and central agents need these credentials in order to
     # call out to other services' public APIs.
-    iniset $CEILOMETER_CONF service_credentials os_username ceilometer
-    iniset $CEILOMETER_CONF service_credentials os_password $SERVICE_PASSWORD
-    iniset $CEILOMETER_CONF service_credentials os_tenant_name $SERVICE_TENANT_NAME
-    iniset $CEILOMETER_CONF service_credentials os_region_name $REGION_NAME
-    iniset $CEILOMETER_CONF service_credentials os_auth_url $KEYSTONE_SERVICE_URI/v2.0
+    iniset $CEILOMETER_CONF service_credentials auth_type password
+    iniset $CEILOMETER_CONF service_credentials user_domain_name default
+    iniset $CEILOMETER_CONF service_credentials project_domain_name default
+    iniset $CEILOMETER_CONF service_credentials project_name $SERVICE_TENANT_NAME
+    iniset $CEILOMETER_CONF service_credentials username ceilometer
+    iniset $CEILOMETER_CONF service_credentials password $SERVICE_PASSWORD
+    iniset $CEILOMETER_CONF service_credentials region_name $REGION_NAME
+    iniset $CEILOMETER_CONF service_credentials auth_url $KEYSTONE_SERVICE_URI
 
     configure_auth_token_middleware $CEILOMETER_CONF ceilometer $CEILOMETER_AUTH_CACHE_DIR
 
